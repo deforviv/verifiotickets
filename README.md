@@ -25,7 +25,7 @@ Le serveur expose une fonction Vercel dans `api/` et conserve `/verify/:id` comm
 
 Vercel ne conserve pas les écritures faites sur son système de fichiers entre les exécutions. Pour garder durablement les liens, tickets et vérifications, connectez une base PostgreSQL persistante (par exemple Neon depuis le Marketplace Vercel). Définissez ensuite dans les variables d’environnement Vercel, pour Production et Preview selon votre usage :
 
-- `DATABASE_URL` : URL de connexion PostgreSQL fournie par l’intégration.
+- `POSTGRES_URL` (ou `DATABASE_URL`) : URL du Transaction pooler PostgreSQL. Les mots de passe contenant des caractères spéciaux doivent être encodés dans l’URL.
 - `VERIFIO_ADMIN_CODE` : code privé long et unique pour le Dashboard.
 - `VERIFIO_SESSION_SECRET` : secret aléatoire long, différent du code du Dashboard.
 - `PUBLIC_URL` : domaine public exact de l’application, par exemple `https://votre-site.vercel.app`.

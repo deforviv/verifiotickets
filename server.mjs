@@ -59,7 +59,7 @@ let db = { links:[], logs:[], tickets:[] };
 async function withPostgresStore(run) {
   if (!pgPool) {
     const { Pool } = await import('pg');
-    pgPool = new Pool({ connectionString: databaseUrl, max: 1 });
+    pgPool = new Pool({ connectionString: databaseUrl, max: 1, ssl: { rejectUnauthorized: true } });
   }
   const client = await pgPool.connect();
   try {
