@@ -101,3 +101,5 @@
 .verify-steps{font-size:13px}
 @media(max-width:640px){.public-nav-links a{font-size:13px}.public-footer-links{gap:10px 14px}.public-footer-links a{font-size:13px}.public-footer-meta{font-size:11px}}
 @media(max-width:390px){.public-nav-links a{font-size:12px}.public-footer-links a{font-size:12px}.public-footer-meta{font-size:11px}}
+
+.dashboard-error{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:-12px 0 24px;padding:15px 18px;border:1px solid #efd9d4;border-radius:14px;background:#fbf4f2;color:#8d403b;font-size:14px;line-height:1.5}.dashboard-error[hidden]{display:none}.dashboard-error .mini{flex:none}@media(max-width:600px){.dashboard-error{align-items:flex-start;flex-direction:column;margin-bottom:18px}}

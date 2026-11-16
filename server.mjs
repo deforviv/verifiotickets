@@ -212,10 +212,14 @@ async function routeRequest(req, res) {
 
 export async function handleRequest(req, res) {
   const route = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
-  if (isVercel && route.startsWith('/api/') && (!databaseUrl || !adminCode || !sessionKey)) {
-    return json(res, 503, { error: 'Configuration requise : connectez une base PostgreSQL persistante et définissez VERIFIO_ADMIN_CODE et VERIFIO_SESSION_SECRET dans Vercel.' });
+  const authRoute = route === '/api/unlock' || route === '/api/lock';
+  if (isVercel && route.startsWith('/api/') && (!adminCode || !sessionKey)) {
+    return json(res, 503, { error: 'Configuration requise : définissez VERIFIO_ADMIN_CODE et VERIFIO_SESSION_SECRET dans Vercel.' });
   }
-  if (databaseUrl && route.startsWith('/api/')) {
+  if (isVercel && route.startsWith('/api/') && !authRoute && !databaseUrl) {
+    return json(res, 503, { error: 'Configuration requise : connectez une base PostgreSQL persistante dans Vercel.' });
+  }
+  if (databaseUrl && route.startsWith('/api/') && !authRoute) {
     let release;
     const previous = pgQueue;
     pgQueue = new Promise(resolve => { release = resolve; });
