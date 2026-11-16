@@ -4,7 +4,7 @@ Application personnelle de création de liens de vérification et de suivi des t
 
 ## Démarrer
 
-Lancer `start-verifio.bat` par double-clic, ou exécuter `npm start` dans ce dossier.
+Lancer `start-verifio.bat` par double-clic, ou exécuter `npm start` dans ce dossier. Les variables de `.env` local sont chargées automatiquement ; `.env.example` donne les noms attendus. Le fichier `.env` réel est ignoré par Git.
 
 Ouvrir `http://localhost:3000`. Au premier démarrage, le code privé du Dashboard est généré dans `data/admin-code.txt` et affiché dans le terminal. Gardez ce code privé. Pour choisir un code personnel, définir `VERIFIO_ADMIN_CODE` avant le démarrage. `PUBLIC_URL` définit le domaine des liens générés en production; `PORT` définit le port d’écoute. Le répertoire `data/` contient les données et n’est pas versionné.
 

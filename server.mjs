@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+if (!process.env.VERCEL && existsSync(path.join(root, '.env'))) process.loadEnvFile(path.join(root, '.env'));
 const dataDir = process.env.VERIFIO_DATA_DIR || path.join(root, 'data');
 const dbPath = path.join(dataDir, 'verifio.sqlite');
 const legacyPath = path.join(dataDir, 'store.json');
