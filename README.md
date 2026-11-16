@@ -19,4 +19,17 @@ Ouvrir `http://localhost:3000`. Au premier démarrage, le code privé du Dashboa
 
 ## Mise en production
 
-Définir `NODE_ENV=production`, `VERIFIO_ADMIN_CODE`, `VERIFIO_SESSION_SECRET`, `PUBLIC_URL` et `PORT`. Utiliser un hébergement Node avec stockage persistant et HTTPS. SQLite convient à une instance unique et à un trafic personnel modéré.
+### Déploiement Vercel
+
+Le serveur expose une fonction Vercel dans `api/` et conserve `/verify/:id` comme page publique indépendante. En local, l’application continue d’utiliser SQLite.
+
+Vercel ne conserve pas les écritures faites sur son système de fichiers entre les exécutions. Pour garder durablement les liens, tickets et vérifications, connectez une base PostgreSQL persistante (par exemple Neon depuis le Marketplace Vercel). Définissez ensuite dans les variables d’environnement Vercel, pour Production et Preview selon votre usage :
+
+- `DATABASE_URL` : URL de connexion PostgreSQL fournie par l’intégration.
+- `VERIFIO_ADMIN_CODE` : code privé long et unique pour le Dashboard.
+- `VERIFIO_SESSION_SECRET` : secret aléatoire long, différent du code du Dashboard.
+- `PUBLIC_URL` : domaine public exact de l’application, par exemple `https://votre-site.vercel.app`.
+
+Redéployez après avoir ajouté ces variables. La première requête API crée les tables PostgreSQL et initialise les 100 tickets de référence. Sans PostgreSQL et secrets configurés, les fonctions API répondent avec une erreur de configuration explicite au lieu de perdre silencieusement des données. Les fichiers statiques restent servis indépendamment.
+
+Pour un serveur Node classique, définir également `NODE_ENV=production` et `PORT`. Utiliser HTTPS en production.
