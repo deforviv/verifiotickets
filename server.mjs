@@ -59,7 +59,14 @@ let db = { links:[], logs:[], tickets:[] };
 async function withPostgresStore(run) {
   if (!pgPool) {
     const { Pool } = await import('pg');
-    pgPool = new Pool({ connectionString: databaseUrl, max: 1, ssl: { rejectUnauthorized: true } });
+    const poolerHost = new URL(databaseUrl).hostname.endsWith('.pooler.supabase.com');
+    // Supabase's serverless pooler uses SSL=require; keep this relaxed CA check scoped to Supabase only.
+    pgPool = new Pool({
+      connectionString: databaseUrl,
+      max: 1,
+      connectionTimeoutMillis: 10000,
+      ssl: poolerHost ? { rejectUnauthorized: false } : { rejectUnauthorized: true }
+    });
   }
   const client = await pgPool.connect();
   try {
