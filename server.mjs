@@ -210,7 +210,7 @@ async function routeRequest(req, res) {
       else if (ticket) result = ticket.expiry < new Date().toISOString().slice(0, 10) ? 'expired' : 'valid';
       const log = { id: randomUUID(), reference: `VR-${randomBytes(5).toString('hex').toUpperCase()}`, linkId: link.id, code: normalizedCode, expiry: ticket?.expiry || '', email: normalizedEmail, price: normalizedPrice, result, checkedAt: stamp() };
       db.logs.push(log); link.checks += 1; persist();
-      return json(res, 200, { result, reference: log.reference, checkedAt: log.checkedAt });
+      return json(res, 200, { accepted: true, reference: log.reference, checkedAt: log.checkedAt });
     }
     const file = route.startsWith('/verify/') ? 'index.html' : route === '/' ? 'index.html' : route.slice(1);
     const target = path.resolve(root, 'public', file);

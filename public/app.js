@@ -54,20 +54,25 @@ function publicPage(){
   const form=$('#verify-form'),progress=$('#verify-progress'),result=$('#result'),stepper=$('.verify-steps'),navCta=$('.public-nav-cta');
   const codeInput=form.elements.code,codeToggle=$('#toggle-code');
   codeToggle.onclick=()=>{const reveal=codeInput.type==='password';codeInput.type=reveal?'text':'password';codeToggle.textContent=reveal?'Masquer':'Afficher';codeToggle.setAttribute('aria-label',reveal?'Masquer le code':'Afficher le code');codeToggle.setAttribute('aria-pressed',String(reveal));codeInput.focus()};
-  const messages={valid:['Ticket authentique','Ce ticket correspond à un enregistrement valide.'],expired:['Ticket expiré','La date d’expiration de ce ticket est dépassée.'],unknown:['Ticket non reconnu','Aucun ticket ne correspond aux informations vérifiées.'],inactive:['Lien désactivé','Ce lien ne peut plus recevoir de vérifications.']};
-  function showResult(status,reference,checkedAt){
-    const [title,description]=messages[status]||['Vérification impossible','Le contrôle n’a pas pu aboutir. Réessayez ou contactez la personne qui vous a transmis ce lien.'];
-    result.className=`result-card ${resultClass(status)}`;result.hidden=false;progress.hidden=true;stepper.hidden=true;navCta.href='#result';navCta.innerHTML='Voir le résultat <span aria-hidden="true">↓</span>';
-    result.innerHTML=`<div class="result-mark" aria-hidden="true">${status==='valid'?'✓':status==='expired'?'⌁':'!'}</div><div class="result-copy"><span class="result-label">RÉSULTAT DU CONTRÔLE</span><h2>${title}</h2><p>${description}</p></div>${reference?`<div class="result-reference"><span>Référence de vérification</span><strong>${escapeHtml(reference)}</strong></div>`:''}${checkedAt?`<div class="result-time">Vérifié le ${escapeHtml(fmt(checkedAt))}</div>`:''}<div class="result-actions"><button class="btn capture-btn" type="button" id="capture-result"><span aria-hidden="true">▧</span> Télécharger la capture</button><button class="btn secondary retry-btn" type="button" id="retry-verification">Nouvelle vérification</button></div><p class="capture-note">La capture contient le résultat et sa référence, jamais le code ni la date saisis.</p>`;
-    $('#retry-verification').onclick=()=>{result.hidden=true;form.hidden=false;stepper.hidden=false;form.reset();$('#result-step').classList.remove('active');navCta.href='#verify-title';navCta.innerHTML='Vérifier un ticket <span aria-hidden="true">→</span>';form.querySelector('[name="email"]').focus()};
-    $('#capture-result').onclick=()=>captureResult({status,title,description,reference,checkedAt});
+  const receiptMessage='Vous recevrez le résultat de la vérification directement par e-mail dès que celle-ci sera terminée.';
+  function resetForRetry(){result.hidden=true;form.hidden=false;stepper.hidden=false;form.reset();$('#result-step').classList.remove('active');navCta.href='#verify-title';navCta.innerHTML='Vérifier un ticket <span aria-hidden="true">→</span>';form.querySelector('[name="email"]').focus()}
+  function showResult(reference,checkedAt){
+    result.className='result-card submitted';result.hidden=false;progress.hidden=true;stepper.hidden=true;navCta.href='#result';navCta.innerHTML='Voir la confirmation <span aria-hidden="true">↓</span>';
+    result.innerHTML=`<div class="result-mark" aria-hidden="true">✓</div><div class="result-copy"><span class="result-label">DEMANDE ENREGISTRÉE</span><h2>Vérification prise en compte</h2><p>${receiptMessage}</p></div>${reference?`<div class="result-reference"><span>Référence de vérification</span><strong>${escapeHtml(reference)}</strong></div>`:''}${checkedAt?`<div class="result-time">Soumis le ${escapeHtml(fmt(checkedAt))}</div>`:''}<div class="result-actions"><button class="btn capture-btn" type="button" id="capture-result"><span aria-hidden="true">▧</span> Télécharger la capture</button><button class="btn secondary retry-btn" type="button" id="retry-verification">Nouvelle vérification</button></div><p class="capture-note">La capture confirme la prise en compte sans révéler les informations saisies ni le résultat.</p>`;
+    $('#retry-verification').onclick=resetForRetry;
+    $('#capture-result').onclick=()=>captureResult({status:'submitted',title:'Vérification prise en compte',description:receiptMessage,reference,checkedAt});
+  }
+  function showFailure(message){
+    result.className='result-card unknown';result.hidden=false;progress.hidden=true;stepper.hidden=true;navCta.href='#result';navCta.innerHTML='Voir le message <span aria-hidden="true">↓</span>';
+    result.innerHTML=`<div class="result-mark" aria-hidden="true">!</div><div class="result-copy"><span class="result-label">ENVOI IMPOSSIBLE</span><h2>La vérification n’a pas abouti</h2><p>${escapeHtml(message)}</p></div><div class="result-actions"><button class="btn secondary retry-btn" type="button" id="retry-verification">Réessayer</button></div>`;
+    $('#retry-verification').onclick=resetForRetry;
   }
   form.onsubmit=async e=>{
     e.preventDefault();if(!form.reportValidity())return;
     const email=form.elements.email.value.trim(),price=form.elements.price.value,code=form.elements.code.value.trim();
     form.elements.email.value='';form.elements.price.value='';form.elements.code.value='';form.hidden=true;stepper.hidden=true;progress.hidden=false;
-    try{const out=await api(`/api/verify/${match?.[1]}.${match?.[2]}`,{method:'POST',body:JSON.stringify({email,price,code})});showResult(out.result,out.reference,out.checkedAt)}
-    catch(err){showResult('error','','');result.querySelector('.result-copy p').textContent=err.message}
+    try{const out=await api(`/api/verify/${match?.[1]}.${match?.[2]}`,{method:'POST',body:JSON.stringify({email,price,code})});showResult(out.reference,out.checkedAt)}
+    catch(err){showFailure(err.message)}
   };
 }
 function captureResult({status,title,description,reference,checkedAt}){
@@ -79,9 +84,9 @@ function captureResult({status,title,description,reference,checkedAt}){
   rounded(145,105,46,46,15,'#155a46');c.fillStyle='#fff';c.font='700 25px Arial';c.textAlign='center';c.fillText('✓',168,136);
   c.textAlign='left';c.fillStyle='#123d32';c.font='700 27px Arial';c.fillText('verifio',207,135);c.fillStyle='#9daa9e';c.font='500 13px Arial';c.fillText('TICKETS',300,134);
   c.strokeStyle='#e4e9df';c.lineWidth=1;c.beginPath();c.moveTo(145,177);c.lineTo(815,177);c.stroke();
-  const isValid=status==='valid',isExpired=status==='expired',accent=isValid?'#397153':isExpired?'#94732c':'#ae5148',pale=isValid?'#eaf3e9':isExpired?'#f5f0df':'#f7edeb';
-  rounded(145,215,52,52,26,pale);c.fillStyle=accent;c.font='700 27px Arial';c.textAlign='center';c.fillText(isValid?'✓':isExpired?'⌁':'!',171,250);
-  c.textAlign='left';c.fillStyle='#8a968c';c.font='700 12px Arial';c.fillText('RÉSULTAT DU CONTRÔLE',220,230);
+  const isValid=status==='valid',isExpired=status==='expired',isSubmitted=status==='submitted',accent=isValid||isSubmitted?'#397153':isExpired?'#94732c':'#ae5148',pale=isValid||isSubmitted?'#eaf3e9':isExpired?'#f5f0df':'#f7edeb';
+  rounded(145,215,52,52,26,pale);c.fillStyle=accent;c.font='700 27px Arial';c.textAlign='center';c.fillText(isValid||isSubmitted?'✓':isExpired?'⌁':'!',171,250);
+  c.textAlign='left';c.fillStyle='#8a968c';c.font='700 12px Arial';c.fillText(isSubmitted?'DEMANDE ENREGISTRÉE':'RÉSULTAT DU CONTRÔLE',220,230);
   c.fillStyle='#123d32';c.font='700 31px Arial';c.fillText(title,220,266);
   c.fillStyle='#68776d';c.font='400 17px Arial';wrapCanvasText(c,description,220,304,530,26);
   c.strokeStyle='#e4e9df';c.beginPath();c.moveTo(145,370);c.lineTo(815,370);c.stroke();
