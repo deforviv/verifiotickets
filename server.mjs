@@ -161,7 +161,7 @@ function isAdmin(req) {
 }
 const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };
 async function body(req) { let raw = ''; for await (const chunk of req) { raw += chunk; if (raw.length > 10000) throw new Error('Requête trop volumineuse'); } return JSON.parse(raw || '{}'); }
-function publicLink(req, link) { return `${process.env.PUBLIC_URL || `http://${req.headers.host}`}/verify/${link.id}.${link.token}`; }
+function publicLink(req, link) { return `${process.env.PUBLIC_URL || `http://${req.headers.host}`}/v/${link.token}`; }
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
 async function routeRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -195,10 +195,12 @@ async function routeRequest(req, res) {
       }
       return json(res, 404, { error: 'Route inconnue.' });
     }
-    const verifyRoute = route.match(/^\/api\/verify\/([\w-]+)\.([\w-]+)$/);
+    const verifyRoute = route.match(/^\/api\/verify\/([\w-]+)(?:\.([\w-]+))?$/);
     if (req.method === 'POST' && verifyRoute) {
-      const link = db.links.find(x => x.id === verifyRoute[1]);
-      if (!link || !safeEq(link.token, verifyRoute[2])) return json(res, 404, { error: 'Lien de vérification introuvable.' });
+      const link = verifyRoute[2]
+        ? db.links.find(x => x.id === verifyRoute[1] && safeEq(x.token, verifyRoute[2]))
+        : db.links.find(x => safeEq(x.token, verifyRoute[1]));
+      if (!link) return json(res, 404, { error: 'Lien de vérification introuvable.' });
       const { code = '', email = '', price = '' } = await body(req);
       const normalizedCode = String(code).trim();
       const normalizedEmail = String(email).trim().toLowerCase();
@@ -212,7 +214,7 @@ async function routeRequest(req, res) {
       db.logs.push(log); link.checks += 1; persist();
       return json(res, 200, { accepted: true, reference: log.reference, checkedAt: log.checkedAt });
     }
-    const file = route.startsWith('/verify/') ? 'index.html' : route === '/' ? 'index.html' : route.slice(1);
+    const file = route.startsWith('/verify/') || route.startsWith('/v/') ? 'index.html' : route === '/' ? 'index.html' : route.slice(1);
     const target = path.resolve(root, 'public', file);
     if (!target.startsWith(path.resolve(root, 'public') + path.sep) && target !== path.resolve(root, 'public', 'index.html')) return json(res, 404, { error: 'Introuvable.' });
     if (!existsSync(target)) return json(res, 404, { error: 'Introuvable.' });
