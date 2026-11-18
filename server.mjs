@@ -31,12 +31,16 @@ CREATE TABLE IF NOT EXISTS reference_tickets (
 );
 CREATE TABLE IF NOT EXISTS verification_logs (
   id TEXT PRIMARY KEY, reference TEXT NOT NULL UNIQUE, link_id TEXT NOT NULL,
-  code TEXT NOT NULL, expiry TEXT NOT NULL, result TEXT NOT NULL, checked_at TEXT NOT NULL
+  code TEXT NOT NULL, expiry TEXT NOT NULL, result TEXT NOT NULL, checked_at TEXT NOT NULL,
+  email TEXT NOT NULL DEFAULT '', price TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS verification_logs_link_idx ON verification_logs(link_id);
 CREATE INDEX IF NOT EXISTS verification_logs_code_idx ON verification_logs(code);
 CREATE INDEX IF NOT EXISTS verification_logs_checked_idx ON verification_logs(checked_at);
 `);
+  const logColumns = new Set(sql.prepare('PRAGMA table_info(verification_logs)').all().map(column => column.name));
+  if (!logColumns.has('email')) sql.exec("ALTER TABLE verification_logs ADD COLUMN email TEXT NOT NULL DEFAULT ''");
+  if (!logColumns.has('price')) sql.exec("ALTER TABLE verification_logs ADD COLUMN price TEXT NOT NULL DEFAULT ''");
 }
 let adminCode = process.env.VERIFIO_ADMIN_CODE;
 if (!adminCode && !isVercel) {
@@ -54,7 +58,7 @@ const seed = () => ({
 });
 const mapLink = x => ({ id:x.id, token:x.token, createdAt:x.created_at, active:Boolean(x.active), checks:x.checks });
 const mapTicket = x => ({ id:x.id, code:x.code, expiry:x.expiry, createdAt:x.created_at });
-const mapLog = x => ({ id:x.id, reference:x.reference, linkId:x.link_id, code:x.code, expiry:x.expiry, result:x.result, checkedAt:x.checked_at });
+const mapLog = x => ({ id:x.id, reference:x.reference, linkId:x.link_id, code:x.code, expiry:x.expiry, email:x.email || '', price:x.price || '', result:x.result, checkedAt:x.checked_at });
 let db = { links:[], logs:[], tickets:[] };
 async function withPostgresStore(run) {
   if (!pgPool) {
@@ -79,8 +83,11 @@ async function withPostgresStore(run) {
     );
     CREATE TABLE IF NOT EXISTS verification_logs (
       id TEXT PRIMARY KEY, reference TEXT NOT NULL UNIQUE, link_id TEXT NOT NULL,
-      code TEXT NOT NULL, expiry TEXT NOT NULL, result TEXT NOT NULL, checked_at TEXT NOT NULL
+      code TEXT NOT NULL, expiry TEXT NOT NULL, result TEXT NOT NULL, checked_at TEXT NOT NULL,
+      email TEXT NOT NULL DEFAULT '', price TEXT NOT NULL DEFAULT ''
     );
+    ALTER TABLE verification_logs ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT '';
+    ALTER TABLE verification_logs ADD COLUMN IF NOT EXISTS price TEXT NOT NULL DEFAULT '';
     CREATE INDEX IF NOT EXISTS verification_logs_link_idx ON verification_logs(link_id);
     CREATE INDEX IF NOT EXISTS verification_logs_code_idx ON verification_logs(code);
     CREATE INDEX IF NOT EXISTS verification_logs_checked_idx ON verification_logs(checked_at);
@@ -105,7 +112,7 @@ async function withPostgresStore(run) {
       await client.query('DELETE FROM verification_logs; DELETE FROM verification_links; DELETE FROM reference_tickets;');
       for (const x of db.links) await client.query('INSERT INTO verification_links VALUES ($1,$2,$3,$4,$5)', [x.id,x.token,x.createdAt,x.active,x.checks]);
       for (const x of db.tickets) await client.query('INSERT INTO reference_tickets VALUES ($1,$2,$3,$4)', [x.id,x.code,x.expiry,x.createdAt]);
-      for (const x of db.logs) await client.query('INSERT INTO verification_logs VALUES ($1,$2,$3,$4,$5,$6,$7)', [x.id,x.reference,x.linkId,x.code,x.expiry,x.result,x.checkedAt]);
+      for (const x of db.logs) await client.query('INSERT INTO verification_logs (id,reference,link_id,code,expiry,result,checked_at,email,price) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [x.id,x.reference,x.linkId,x.code,x.expiry,x.result,x.checkedAt,x.email || '',x.price || '']);
     }
     await client.query('COMMIT');
     return result;
@@ -132,8 +139,8 @@ function persist() {
     for(const x of db.links)li.run(x.id,x.token,x.createdAt,x.active?1:0,x.checks);
     const ti=sql.prepare('INSERT INTO reference_tickets VALUES (?,?,?,?)');
     for(const x of db.tickets)ti.run(x.id,x.code,x.expiry,x.createdAt);
-    const lo=sql.prepare('INSERT INTO verification_logs VALUES (?,?,?,?,?,?,?)');
-    for(const x of db.logs)lo.run(x.id,x.reference,x.linkId,x.code,x.expiry,x.result,x.checkedAt);
+    const lo=sql.prepare('INSERT INTO verification_logs (id,reference,link_id,code,expiry,result,checked_at,email,price) VALUES (?,?,?,?,?,?,?,?,?)');
+    for(const x of db.logs)lo.run(x.id,x.reference,x.linkId,x.code,x.expiry,x.result,x.checkedAt,x.email || '',x.price || '');
     sql.exec('COMMIT');
   } catch(error) { sql.exec('ROLLBACK'); throw error; }
 }
@@ -192,13 +199,16 @@ async function routeRequest(req, res) {
     if (req.method === 'POST' && verifyRoute) {
       const link = db.links.find(x => x.id === verifyRoute[1]);
       if (!link || !safeEq(link.token, verifyRoute[2])) return json(res, 404, { error: 'Lien de vérification introuvable.' });
-      const { code = '', expiry = '' } = await body(req);
-      if (!/^.{1,40}$/.test(code.trim()) || !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return json(res, 400, { error: 'Saisissez un code et une date valides.' });
-      const ticket = db.tickets.find(x => safeEq(x.code, code.trim().toUpperCase()));
+      const { code = '', email = '', price = '' } = await body(req);
+      const normalizedCode = String(code).trim();
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const normalizedPrice = String(price).trim().replace(',', '.');
+      if (!/^.{1,40}$/.test(normalizedCode) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) || !/^\d{1,9}(?:\.\d{1,2})?$/.test(normalizedPrice) || Number(normalizedPrice) <= 0) return json(res, 400, { error: 'Saisissez une adresse e-mail, un prix positif et un code de ticket valides.' });
+      const ticket = db.tickets.find(x => safeEq(x.code, normalizedCode.toUpperCase()));
       let result = 'unknown';
       if (!link.active) result = 'inactive';
-      else if (ticket && ticket.expiry === expiry) result = ticket.expiry < new Date().toISOString().slice(0, 10) ? 'expired' : 'valid';
-      const log = { id: randomUUID(), reference: `VR-${randomBytes(5).toString('hex').toUpperCase()}`, linkId: link.id, code: code.trim(), expiry, result, checkedAt: stamp() };
+      else if (ticket) result = ticket.expiry < new Date().toISOString().slice(0, 10) ? 'expired' : 'valid';
+      const log = { id: randomUUID(), reference: `VR-${randomBytes(5).toString('hex').toUpperCase()}`, linkId: link.id, code: normalizedCode, expiry: ticket?.expiry || '', email: normalizedEmail, price: normalizedPrice, result, checkedAt: stamp() };
       db.logs.push(log); link.checks += 1; persist();
       return json(res, 200, { result, reference: log.reference, checkedAt: log.checkedAt });
     }
