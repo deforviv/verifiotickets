@@ -15,7 +15,6 @@
 .step-line{width:34px;height:1px;background:#e4e9df}
 .verify-form{gap:13px}
 .verify-form .field{border-radius:12px;height:48px;padding:12px 14px;font-size:13px}
-.verify-data-note{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#f8faf5;color:var(--muted);font-size:12px;line-height:1.6}
 .code-input-wrap{position:relative;display:block}.code-input-wrap .field{padding-right:88px!important}.code-visibility{position:absolute;right:10px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--green);font:600 12px Manrope,sans-serif;padding:8px 4px;cursor:pointer}.code-visibility:focus-visible{outline:2px solid #6a9b7f;border-radius:6px}
 .verify-form .btn{height:49px;margin-top:4px;font-size:12px}
 .verify-card .privacy{display:flex;align-items:flex-start;justify-content:center;gap:8px;text-align:left;font-size:10px;line-height:1.6;margin:17px auto 0;max-width:390px}
