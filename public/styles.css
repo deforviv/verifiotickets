@@ -8,6 +8,7 @@
 .secure-dot{width:8px;height:8px;border-radius:50%;background:#54a476;box-shadow:0 0 0 4px #e8f1e8}
 .verify-card h1{font-size:clamp(25px,5vw,30px);letter-spacing:-1.1px;line-height:1.2;margin-bottom:10px}
 .verify-card .sub{line-height:1.7;margin-bottom:21px;max-width:420px}
+.ticket-carousel{margin:-5px 0 20px}.ticket-carousel-frame{position:relative;overflow:hidden;width:100%;aspect-ratio:16/10;max-height:250px;border:1px solid var(--line);border-radius:15px;background:#f8faf5}.ticket-slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:10px;opacity:0;transform:translateX(18px);transition:opacity .5s ease,transform .5s ease}.ticket-slide.active{opacity:1;transform:translateX(0)}.ticket-carousel-controls{display:flex;align-items:center;gap:12px;padding:10px 3px 0}.ticket-carousel-caption{min-width:70px;color:var(--ink);font-size:12px;font-weight:700}.ticket-carousel-dots{display:flex;justify-content:center;align-items:center;gap:7px;flex:1}.ticket-carousel-dots button{width:8px;height:8px;padding:0;border:0;border-radius:50%;background:#d8e0d6;transition:width .2s,background .2s}.ticket-carousel-dots button[aria-pressed="true"]{width:22px;border-radius:999px;background:var(--green)}.ticket-carousel-toggle{border:1px solid var(--line);border-radius:999px;padding:6px 11px;background:var(--white);color:var(--green);font-size:11px;font-weight:700}.ticket-carousel-toggle:focus-visible,.ticket-carousel-dots button:focus-visible{outline:2px solid #6a9b7f;outline-offset:3px}
 .verify-steps{display:flex;align-items:center;gap:9px;margin:0 0 21px;color:#9ba49b;font-size:10px;font-weight:600}
 .step{display:flex;align-items:center;gap:6px;white-space:nowrap}
 .step i{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#eff1ec;color:#7f8b81;font-size:10px;font-style:normal}
@@ -104,3 +105,5 @@
 @media(max-width:390px){.public-nav-links a{font-size:12px}.public-footer-links a{font-size:12px}.public-footer-meta{font-size:11px}}
 
 .dashboard-error{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:-12px 0 24px;padding:15px 18px;border:1px solid #efd9d4;border-radius:14px;background:#fbf4f2;color:#8d403b;font-size:14px;line-height:1.5}.dashboard-error[hidden]{display:none}.dashboard-error .mini{flex:none}@media(max-width:600px){.dashboard-error{align-items:flex-start;flex-direction:column;margin-bottom:18px}}
+
+@media (prefers-reduced-motion: reduce){.ticket-slide{transition:none}}
