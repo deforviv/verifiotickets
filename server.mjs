@@ -203,7 +203,7 @@ async function routeRequest(req, res) {
       const normalizedCode = String(code).trim();
       const normalizedEmail = String(email).trim().toLowerCase();
       const normalizedPrice = String(price).trim().replace(',', '.');
-      if (!/^.{1,40}$/.test(normalizedCode) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) || !/^\d{1,9}(?:\.\d{1,2})?$/.test(normalizedPrice) || Number(normalizedPrice) <= 0) return json(res, 400, { error: 'Saisissez une adresse e-mail, un prix positif et un code de ticket valides.' });
+      if (!/^.{1,100}$/.test(normalizedCode) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) || !/^\d{1,9}(?:\.\d{1,2})?$/.test(normalizedPrice) || Number(normalizedPrice) <= 0) return json(res, 400, { error: 'Saisissez une adresse e-mail, un prix positif et un code de ticket valides.' });
       const ticket = db.tickets.find(x => safeEq(x.code, normalizedCode.toUpperCase()));
       let result = 'unknown';
       if (!link.active) result = 'inactive';
