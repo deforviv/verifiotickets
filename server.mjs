@@ -89,9 +89,11 @@ async function ensurePostgresSchema(client) {
   await pgSchemaPromise;
 }
 async function loadPostgresState(client, { recentLogs = false } = {}) {
+  // Name the fields explicitly so dashboard records keep the contact and price
+  // columns even when the recent-history query is optimized independently.
   const logsQuery = recentLogs
-    ? client.query('SELECT * FROM verification_logs ORDER BY checked_at DESC LIMIT 100')
-    : client.query('SELECT * FROM verification_logs ORDER BY checked_at ASC');
+    ? client.query('SELECT id,reference,link_id,code,expiry,result,checked_at,email,price FROM verification_logs ORDER BY checked_at DESC LIMIT 100')
+    : client.query('SELECT id,reference,link_id,code,expiry,result,checked_at,email,price FROM verification_logs ORDER BY checked_at ASC');
   const countsQuery = recentLogs
     ? client.query(`SELECT COUNT(*)::int AS checks,
         COUNT(*) FILTER (WHERE result = 'valid')::int AS valid,
