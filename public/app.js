@@ -49,7 +49,7 @@ function publicPage(){
   const form=$('#verify-form'),progress=$('#verify-progress'),result=$('#result'),stepper=$('.verify-steps'),navCta=$('.public-nav-cta');
   const codeInput=form.elements.code,codeToggle=$('#toggle-code');
   codeToggle.onclick=()=>{const reveal=codeInput.type==='password';codeInput.type=reveal?'text':'password';codeToggle.textContent=reveal?'Masquer':'Afficher';codeToggle.setAttribute('aria-label',reveal?'Masquer le code':'Afficher le code');codeToggle.setAttribute('aria-pressed',String(reveal));codeInput.focus()};
-  const receiptMessage='Votre demande a été enregistrée. Le résultat est consultable dans l’historique privé du propriétaire. Aucun résultat ne s’affiche sur cette page.';
+  const receiptMessage='Vous recevrez le résultat de la vérification directement dès que celle-ci sera terminée.';
   function resetForRetry(){result.hidden=true;form.hidden=false;stepper.hidden=false;form.reset();$('#result-step').classList.remove('active');navCta.href='#verify-title';navCta.innerHTML='Vérifier un ticket <span aria-hidden="true">→</span>';form.querySelector('[name="email"]').focus()}
   function showResult(reference,checkedAt){
     result.className='result-card submitted';result.hidden=false;progress.hidden=true;stepper.hidden=true;navCta.href='#result';navCta.innerHTML='Voir la confirmation <span aria-hidden="true">↓</span>';
