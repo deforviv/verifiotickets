@@ -15,6 +15,7 @@ const isVercel = Boolean(process.env.VERCEL);
 let sql = null;
 let pgPool = null;
 let pgDirty = false;
+let pgSchemaPromise = null;
 if (!databaseUrl && isVercel) {
   // Vercel's filesystem is ephemeral. Never silently store production data there.
   console.warn('DATABASE_URL is required for persistent Verifio data on Vercel.');
@@ -60,21 +61,9 @@ const mapLink = x => ({ id:x.id, token:x.token, createdAt:x.created_at, active:B
 const mapTicket = x => ({ id:x.id, code:x.code, expiry:x.expiry, createdAt:x.created_at });
 const mapLog = x => ({ id:x.id, reference:x.reference, linkId:x.link_id, code:x.code, expiry:x.expiry, email:x.email || '', price:x.price || '', result:x.result, checkedAt:x.checked_at });
 let db = { links:[], logs:[], tickets:[] };
-async function withPostgresStore(run) {
-  if (!pgPool) {
-    const { Pool } = await import('pg');
-    const poolerHost = new URL(databaseUrl).hostname.endsWith('.pooler.supabase.com');
-    // Supabase's serverless pooler uses SSL=require; keep this relaxed CA check scoped to Supabase only.
-    pgPool = new Pool({
-      connectionString: databaseUrl,
-      max: 1,
-      connectionTimeoutMillis: 10000,
-      ssl: poolerHost ? { rejectUnauthorized: false } : { rejectUnauthorized: true }
-    });
-  }
-  const client = await pgPool.connect();
-  try {
-    await client.query(`CREATE TABLE IF NOT EXISTS verification_links (
+async function ensurePostgresSchema(client) {
+  if (!pgSchemaPromise) {
+    pgSchemaPromise = client.query(`CREATE TABLE IF NOT EXISTS verification_links (
       id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
       active BOOLEAN NOT NULL DEFAULT TRUE, checks INTEGER NOT NULL DEFAULT 0
     );
@@ -92,19 +81,66 @@ async function withPostgresStore(run) {
     CREATE INDEX IF NOT EXISTS verification_logs_code_idx ON verification_logs(code);
     CREATE INDEX IF NOT EXISTS verification_logs_checked_idx ON verification_logs(checked_at);
     CREATE TABLE IF NOT EXISTS verifio_store_lock (id INTEGER PRIMARY KEY);
-    INSERT INTO verifio_store_lock(id) VALUES (1) ON CONFLICT (id) DO NOTHING;`);
+    INSERT INTO verifio_store_lock(id) VALUES (1) ON CONFLICT (id) DO NOTHING;`).catch(error => {
+      pgSchemaPromise = null;
+      throw error;
+    });
+  }
+  await pgSchemaPromise;
+}
+async function loadPostgresState(client, { recentLogs = false } = {}) {
+  const logsQuery = recentLogs
+    ? client.query('SELECT * FROM verification_logs ORDER BY checked_at DESC LIMIT 100')
+    : client.query('SELECT * FROM verification_logs ORDER BY checked_at ASC');
+  const countsQuery = recentLogs
+    ? client.query(`SELECT COUNT(*)::int AS checks,
+        COUNT(*) FILTER (WHERE result = 'valid')::int AS valid,
+        COUNT(*) FILTER (WHERE result = 'expired')::int AS expired,
+        COUNT(*) FILTER (WHERE result IN ('unknown','inactive'))::int AS failed
+      FROM verification_logs`)
+    : Promise.resolve(null);
+  const [links, tickets, logs, summary] = await Promise.all([
+    client.query('SELECT * FROM verification_links'),
+    client.query('SELECT * FROM reference_tickets'),
+    logsQuery,
+    countsQuery
+  ]);
+  const counts = summary?.rows[0] ? Object.fromEntries(Object.entries(summary.rows[0]).map(([key, value]) => [key, Number(value)])) : null;
+  db = {
+    links: links.rows.map(mapLink),
+    tickets: tickets.rows.map(mapTicket),
+    logs: (recentLogs ? logs.rows.reverse() : logs.rows).map(mapLog),
+    counts
+  };
+}
+async function withPostgresStore(run, { readOnly = false, recentLogs = false } = {}) {
+  if (!pgPool) {
+    const { Pool } = await import('pg');
+    const poolerHost = new URL(databaseUrl).hostname.endsWith('.pooler.supabase.com');
+    // Supabase's serverless pooler uses SSL=require; keep this relaxed CA check scoped to Supabase only.
+    pgPool = new Pool({
+      connectionString: databaseUrl,
+      max: 1,
+      connectionTimeoutMillis: 10000,
+      ssl: poolerHost ? { rejectUnauthorized: false } : { rejectUnauthorized: true }
+    });
+  }
+  const client = await pgPool.connect();
+  try {
+    await ensurePostgresSchema(client);
+    if (readOnly) {
+      await client.query('BEGIN READ ONLY');
+      await loadPostgresState(client, { recentLogs });
+      if (db.tickets.length > 0) {
+        const result = await run();
+        await client.query('COMMIT');
+        return result;
+      }
+      await client.query('ROLLBACK');
+    }
     await client.query('BEGIN');
     await client.query('SELECT id FROM verifio_store_lock WHERE id = 1 FOR UPDATE');
-    const [links, tickets, logs] = await Promise.all([
-      client.query('SELECT * FROM verification_links'),
-      client.query('SELECT * FROM reference_tickets'),
-      client.query('SELECT * FROM verification_logs')
-    ]);
-    db = {
-      links: links.rows.map(mapLink),
-      tickets: tickets.rows.map(mapTicket),
-      logs: logs.rows.map(mapLog)
-    };
+    await loadPostgresState(client);
     pgDirty = false;
     if (db.tickets.length === 0) { db = seed(); pgDirty = true; }
     const result = await run();
@@ -126,8 +162,9 @@ async function withPostgresStore(run) {
 let pgQueue = Promise.resolve();
 function loadDb() {
   if (!sql) return;
+  db.counts=null;
   db.links=sql.prepare('SELECT * FROM verification_links').all().map(mapLink);
-  db.logs=sql.prepare('SELECT * FROM verification_logs').all().map(mapLog);
+  db.logs=sql.prepare('SELECT * FROM verification_logs ORDER BY checked_at ASC').all().map(mapLog);
   db.tickets=sql.prepare('SELECT * FROM reference_tickets').all().map(mapTicket);
 }
 function persist() {
@@ -177,9 +214,10 @@ async function routeRequest(req, res) {
     if (req.method === 'POST' && route === '/api/lock') { res.setHeader('Set-Cookie', 'verifio_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'); return json(res, 200, { ok: true }); }
     if (route.startsWith('/api/admin/')) {
       if (!isAdmin(req)) return json(res, 401, { error: 'Accès au Dashboard verrouillé.' });
+      if (req.method === 'GET' && route === '/api/admin/history') return json(res, 200, { logs: db.logs.slice().reverse() });
       if (req.method === 'GET' && route === '/api/admin/data') {
-        const counts = { links: db.links.length, checks: db.logs.length, valid: db.logs.filter(x => x.result === 'valid').length, expired: db.logs.filter(x => x.result === 'expired').length, failed: db.logs.filter(x => x.result === 'unknown' || x.result === 'inactive').length };
-        return json(res, 200, { counts, links: db.links.map(({ token, ...x }) => ({ ...x, url: publicLink(req, { ...x, token }) })), logs: db.logs.slice().reverse(), tickets: db.tickets });
+        const counts = { links: db.links.length, checks: db.counts?.checks ?? db.logs.length, valid: db.counts?.valid ?? db.logs.filter(x => x.result === 'valid').length, expired: db.counts?.expired ?? db.logs.filter(x => x.result === 'expired').length, failed: db.counts?.failed ?? db.logs.filter(x => x.result === 'unknown' || x.result === 'inactive').length };
+        return json(res, 200, { counts, links: db.links.map(({ token, ...x }) => ({ ...x, url: publicLink(req, { ...x, token }) })), logs: db.logs.slice(-100).reverse(), tickets: db.tickets });
       }
       if (req.method === 'POST' && route === '/api/admin/links') {
         const link = { id: randomUUID(), token: randomBytes(24).toString('base64url'), createdAt: stamp(), active: true, checks: 0 };
@@ -236,7 +274,7 @@ export async function handleRequest(req, res) {
     const previous = pgQueue;
     pgQueue = new Promise(resolve => { release = resolve; });
     await previous;
-    try { return await withPostgresStore(() => routeRequest(req, res)); }
+    try { return await withPostgresStore(() => routeRequest(req, res), { readOnly: req.method === 'GET', recentLogs: req.method === 'GET' && route === '/api/admin/data' }); }
     catch (error) { console.error(error); if (!res.headersSent) return json(res, 503, { error: 'Base de données indisponible. Vérifiez la configuration PostgreSQL de Vercel.' }); }
     finally { release(); }
   }
